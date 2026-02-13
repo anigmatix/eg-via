@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from eval!")
+"""Evaluation harness package for EG-VIA."""
+
+__all__ = ["checks", "dataset", "run"]
