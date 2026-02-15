@@ -1,0 +1,32 @@
+{
+  "header": {
+    "type": "esummary",
+    "version": "0.3"
+  },
+  "result": {
+    "uids": [
+      "101",
+      "202"
+    ],
+    "101": {
+      "uid": "101",
+      "accession": "VCV000000101",
+      "title": "NM_007294.4(BRCA1):c.68_69delAG (p.Glu23Valfs)",
+      "review_status": "criteria provided, multiple submitters, no conflicts",
+      "germline_classification": {
+        "description": "Pathogenic",
+        "last_evaluated": "2021-05-14"
+      }
+    },
+    "202": {
+      "uid": "202",
+      "accession": "VCV000000202",
+      "title": "NM_007294.4(BRCA1):c.5266dupC (p.Gln1756Profs)",
+      "review_status": "criteria provided, single submitter",
+      "clinical_significance": {
+        "description": "Likely pathogenic",
+        "last_evaluated": "2018-11-20"
+      }
+    }
+  }
+}

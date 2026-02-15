@@ -1,0 +1,17 @@
+{
+  "header": {
+    "type": "esearch"
+  },
+  "esearchresult": {
+    "count": "2",
+    "retmax": "2",
+    "retstart": "0",
+    "idlist": [
+      "101",
+      "202"
+    ],
+    "translationset": [],
+    "translationstack": [],
+    "querytranslation": "BRCA1[gene] AND c.68_69delAG"
+  }
+}
