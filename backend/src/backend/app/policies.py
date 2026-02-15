@@ -27,18 +27,19 @@ def build_abstention_panel(
             "No claims extracted after schema validation.",
             "Interpretation is abstained because evidence is missing.",
         ]
+        abstain_reasons = [
+            "No claims extracted after schema validation.",
+            "Insufficient evidence for citation-grounded interpretation.",
+        ]
         if source_count == 0:
             reasons.insert(0, "No sources retrieved (retrieval stub).")
+            abstain_reasons.insert(0, "No sources retrieved (retrieval stub).")
 
         return ConfidencePanel(
             confidence=0.1,
             reasons=reasons,
             abstain=True,
-            abstain_reasons=[
-                "No sources retrieved (retrieval stub).",
-                "No claims extracted after schema validation.",
-                "Insufficient evidence for citation-grounded interpretation.",
-            ],
+            abstain_reasons=abstain_reasons,
         )
 
     reasons = ["At least one claim was available."]

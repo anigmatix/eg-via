@@ -3,46 +3,43 @@
 from __future__ import annotations
 
 from backend.app.policies import build_abstention_panel, contains_treatment_language
-from backend.app.schemas import Draft, InterpretRequest, InterpretResponse, Trace
+from backend.app.retrieval import BaseRetriever, RetrievalError, build_retriever_from_env
+from backend.app.schemas import (
+    Claim,
+    Citation,
+    Draft,
+    EvidenceTableEntry,
+    InterpretRequest,
+    InterpretResponse,
+    Trace,
+)
 from backend.app.trace import elapsed_between_ms, new_request_id, start_timer
 
 
-def _normalized(value: str, fallback: str) -> str:
-    """Normalize user input for deterministic query construction."""
-
-    normalized = value.strip()
-    return normalized if normalized else fallback
-
-
-def _build_retrieval_queries(request: InterpretRequest) -> list[str]:
-    """Build deterministic, request-derived retrieval query candidates."""
-
-    gene = _normalized(request.gene, "UNKNOWN_GENE")
-    hgvs = _normalized(request.hgvs, "UNKNOWN_HGVS")
-    disease_context = _normalized(request.disease_context, "unspecified_disease")
-    assay_hint = request.assay_context.value
-
-    queries = [
-        f"{gene} {hgvs}",
-        f"{gene} {disease_context} somatic",
-        f"{gene} {hgvs} {assay_hint}",
-    ]
-
-    deduped: list[str] = []
-    for query in queries:
-        if query not in deduped:
-            deduped.append(query)
-    return deduped[:4]
-
-
-def _build_stub_draft() -> Draft:
+def _build_stub_draft(*, source_count: int, claim_count: int) -> Draft:
     """Create a safe, uncertainty-forward draft without treatment content."""
+
+    if source_count > 0 and claim_count == 0:
+        what_is_known = (
+            f"{source_count} evidence source(s) were retrieved, but no validated claims are "
+            "available yet."
+        )
+        limitations = (
+            "Evidence sources were retrieved, but claim extraction is not yet "
+            "implemented; no validated claims were produced."
+        )
+    else:
+        what_is_known = "No validated evidence claims were produced in this run."
+        limitations = (
+            "No sources were retrieved in this run, and claim extraction remains "
+            "stubbed."
+        )
 
     draft = Draft(
         summary="Evidence is currently insufficient to produce a citation-grounded interpretation.",
-        what_is_known="No validated evidence claims were produced in this run.",
+        what_is_known=what_is_known,
         conflicting_evidence="No direct claim conflicts were identified because no claims were extracted.",
-        limitations="This is a stub pipeline response with empty retrieval and extraction outputs.",
+        limitations=limitations,
         uncertainty="Uncertainty is high due to absence of supporting claims and citations.",
         disclaimer="For assistive evidence synthesis only; not for diagnostic or therapeutic decision use.",
     )
@@ -58,28 +55,69 @@ def _verify_draft_language(draft: Draft) -> None:
             raise ValueError("Draft contains blocked treatment-like language.")
 
 
-def run_interpretation(request: InterpretRequest) -> InterpretResponse:
+def _build_placeholder_evidence_table(
+    retrieved_citations: list[Citation],
+) -> list[EvidenceTableEntry]:
+    """Represent retrieved sources without asserting biomedical claims."""
+
+    entries: list[EvidenceTableEntry] = []
+    for citation in retrieved_citations:
+        claim = Claim(
+            claim_id=f"placeholder-{citation.citation_id}",
+            text=(
+                f"Source retrieved from {citation.source}; claim extraction not yet "
+                "implemented for this citation."
+            ),
+            citation_id=citation.citation_id,
+            supports_or_contradicts="neutral",
+            evidence_strength="Weak",
+            year=citation.year,
+        )
+        entries.append(EvidenceTableEntry(citation=citation, claim=claim))
+    return entries
+
+
+def run_interpretation(
+    request: InterpretRequest,
+    *,
+    retriever: BaseRetriever | None = None,
+) -> InterpretResponse:
     """Run the deterministic stub pipeline and return a contract-valid response."""
 
     total_start = start_timer()
     request_id = new_request_id()
 
-    # Retrieval stage (stub): produce deterministic would-run query strings.
+    active_retriever = retriever or build_retriever_from_env()
+
+    # Retrieval stage: delegated entirely to the retrieval tool interface.
     retrieval_start = start_timer()
-    retrieval_queries = _build_retrieval_queries(request)
+    retrieved_citations = []
+    retrieval_queries: list[str] = []
+    retrieval_failures: list[str] = []
+    try:
+        retrieval_result = active_retriever.retrieve(request)
+        retrieved_citations = retrieval_result.citations
+        retrieval_queries = retrieval_result.queries
+        retrieval_failures = retrieval_result.failures
+    except RetrievalError as exc:
+        retrieval_failures.append(str(exc))
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        retrieval_failures.append(
+            f"retrieval.interface: unexpected {exc.__class__.__name__}: {exc}"
+        )
     retrieval_end = start_timer()
 
-    # Extraction stage (stub): no sources and no claims.
+    # Extraction stage (stub): no validated claims yet, even when sources are retrieved.
     extraction_start = start_timer()
-    evidence_table = []
-    source_count = 0
+    evidence_table = _build_placeholder_evidence_table(retrieved_citations)
+    source_count = len(retrieved_citations)
     claim_count = 0
     conflict_count = 0
     extraction_end = start_timer()
 
     # Synthesis stage (stub): deterministic uncertainty-forward draft.
     synthesis_start = start_timer()
-    draft = _build_stub_draft()
+    draft = _build_stub_draft(source_count=source_count, claim_count=claim_count)
     synthesis_end = start_timer()
 
     # Verification stage (stub): language safety gate + abstention gate.
@@ -103,7 +141,7 @@ def run_interpretation(request: InterpretRequest) -> InterpretResponse:
             "treatment_language_block",
             "abstention_gate",
         ],
-        verification_failures=[],
+        verification_failures=retrieval_failures,
         timings_ms={
             "retrieval": elapsed_between_ms(retrieval_start, retrieval_end),
             "extraction": elapsed_between_ms(extraction_start, extraction_end),
